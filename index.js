@@ -1,6 +1,6 @@
 /**
  * PONG
- * Refactored with Classes, Game Loop, AI, and Sound
+ * Refactored with Classes, Game Loop, AI, Sound, Particles, and Game States
  */
 
 // --- Constants ---
@@ -14,11 +14,21 @@ const BALL_RADIUS = 12.5;
 const PADDLE_WIDTH = 25;
 const PADDLE_HEIGHT = 100;
 
-// Physics constants (adjusted for ~60FPS)
+const WIN_SCORE = 5;
+
+// Physics constants
 const PADDLE_SPEED = 6;
-const INITIAL_BALL_SPEED = 4;
+const INITIAL_BALL_SPEED = 5;
 const BALL_SPEED_INCREASE = 0.5;
-const MAX_BALL_SPEED = 15;
+const MAX_BALL_SPEED = 18;
+
+// Difficulty Settings (AI Speed relative to base speed)
+const DIFFICULTIES = {
+    EASY: { name: 'EASY', speedRatio: 0.55 },
+    MEDIUM: { name: 'MEDIUM', speedRatio: 0.85 },
+    HARD: { name: 'HARD', speedRatio: 1.05 }, // Slightly faster than base paddle speed
+    IMPOSSIBLE: { name: 'IMPOSSIBLE', speedRatio: 1.8 } 
+};
 
 // Keys
 const KEYS = {
@@ -26,8 +36,40 @@ const KEYS = {
     P1_DOWN: 's',
     P2_UP: 'ArrowUp',
     P2_DOWN: 'ArrowDown',
-    PAUSE: 'Escape'
+    PAUSE: 'Escape',
+    MENU_UP: 'ArrowUp',
+    MENU_DOWN: 'ArrowDown',
+    SELECT: 'Enter'
 };
+
+// --- Particle System ---
+class Particle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = Math.random() * 4 + 1;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.03 + 0.02;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, 6, 6);
+        ctx.restore();
+    }
+}
 
 // --- Audio Controller ---
 class AudioController {
@@ -59,18 +101,26 @@ class AudioController {
     playPaddleHit() { this.playTone(440, 'square', 0.1); }
     playWallHit() { this.playTone(220, 'square', 0.1); }
     playScore() { this.playTone(660, 'sine', 0.3); }
+    playWin() { 
+        this.playTone(523.25, 'triangle', 0.2);
+        setTimeout(() => this.playTone(659.25, 'triangle', 0.2), 200);
+        setTimeout(() => this.playTone(783.99, 'triangle', 0.4), 400);
+    }
 }
 
 // --- Input Handler ---
 class InputHandler {
     constructor() {
         this.keys = new Set();
-        
+        this.callbacks = {};
+
         window.addEventListener('keydown', e => {
             this.keys.add(e.key);
-            // Prevent default scrolling for game keys
             if ([KEYS.P2_UP, KEYS.P2_DOWN, ' '].includes(e.key)) {
                 e.preventDefault();
+            }
+            if (this.callbacks[e.key]) {
+                this.callbacks[e.key]();
             }
         });
         
@@ -81,6 +131,10 @@ class InputHandler {
 
     isPressed(key) {
         return this.keys.has(key);
+    }
+
+    onKey(key, callback) {
+        this.callbacks[key] = callback;
     }
 }
 
@@ -96,43 +150,72 @@ class Game {
         this.audio = new AudioController();
         this.input = new InputHandler();
 
-        this.state = 'MENU'; // MENU, PLAYING, PAUSED
-        this.isSinglePlayer = false;
+        this.state = 'MENU'; // MENU, PLAYING, PAUSED, GAMEOVER
+        this.mode = 'PVP'; // PVP, AI
+        this.difficulty = DIFFICULTIES.MEDIUM;
+        this.winner = null;
+
+        // Visual Effects
+        this.particles = [];
+        this.shakeTime = 0;
+        this.shakeIntensity = 0;
 
         // Game Objects
         this.paddle1 = { x: 0, y: 0, score: 0 };
         this.paddle2 = { x: 0, y: 0, score: 0 };
-        this.ball = { x: 0, y: 0, dx: 0, dy: 0, speed: 0 };
+        this.ball = { 
+            x: 0, y: 0, dx: 0, dy: 0, speed: 0,
+            trail: [] 
+        };
+
+        // UI State
+        this.menuSelection = 0; // 0: PVP, 1: AI (Easy), 2: AI (Med), 3: AI (Hard)
+        this.menuOptions = [
+            { text: "2 Player (PvP)", mode: 'PVP' },
+            { text: "1 Player (Easy)", mode: 'AI', diff: DIFFICULTIES.EASY },
+            { text: "1 Player (Medium)", mode: 'AI', diff: DIFFICULTIES.MEDIUM },
+            { text: "1 Player (Hard)", mode: 'AI', diff: DIFFICULTIES.HARD },
+            { text: "1 Player (Impossible)", mode: 'AI', diff: DIFFICULTIES.IMPOSSIBLE }
+        ];
 
         // Bind reset button
         resetBtn.addEventListener('click', () => this.resetGame());
         
-        // Listen for pause toggle separately
-        window.addEventListener('keydown', (e) => {
-            if (e.key === KEYS.PAUSE) this.togglePause();
-            if (this.state === 'MENU' && e.key === 'Enter') {
-                this.isSinglePlayer = false;
-                this.start();
-            }
-            if (this.state === 'MENU' && e.key === 'a') {
-                this.isSinglePlayer = true;
-                this.start();
-            }
-        });
+        // Input bindings for non-continuous actions
+        this.input.onKey(KEYS.PAUSE, () => this.togglePause());
+        this.input.onKey(KEYS.MENU_UP, () => this.navigateMenu(-1));
+        this.input.onKey(KEYS.MENU_DOWN, () => this.navigateMenu(1));
+        this.input.onKey(KEYS.SELECT, () => this.selectMenuOption());
 
         this.resetPositions();
-        this.drawMenu();
+        this.loop(); // Start the loop immediately to render menu
+    }
+
+    navigateMenu(direction) {
+        if (this.state !== 'MENU') return;
+        this.menuSelection += direction;
+        if (this.menuSelection < 0) this.menuSelection = this.menuOptions.length - 1;
+        if (this.menuSelection >= this.menuOptions.length) this.menuSelection = 0;
+    }
+
+    selectMenuOption() {
+        if (this.state === 'MENU') {
+            const option = this.menuOptions[this.menuSelection];
+            this.mode = option.mode;
+            if (option.diff) this.difficulty = option.diff;
+            this.start();
+        } else if (this.state === 'GAMEOVER') {
+            this.resetGame();
+        }
     }
 
     resetPositions() {
-        // Center paddles
         this.paddle1.y = (this.height - PADDLE_HEIGHT) / 2;
         this.paddle1.x = 0;
         
         this.paddle2.y = (this.height - PADDLE_HEIGHT) / 2;
         this.paddle2.x = this.width - PADDLE_WIDTH;
 
-        // Reset ball
         this.resetBall();
     }
 
@@ -140,40 +223,55 @@ class Game {
         this.ball.x = this.width / 2;
         this.ball.y = this.height / 2;
         this.ball.speed = INITIAL_BALL_SPEED;
-        
-        // Random direction
+        this.ball.trail = [];
         this.ball.dx = Math.random() > 0.5 ? 1 : -1;
         this.ball.dy = Math.random() > 0.5 ? 1 : -1;
     }
 
     start() {
+        this.paddle1.score = 0;
+        this.paddle2.score = 0;
+        this.updateScoreDisplay();
         this.state = 'PLAYING';
-        this.loop();
+        this.resetPositions();
     }
 
     togglePause() {
         if (this.state === 'PLAYING') {
             this.state = 'PAUSED';
-            this.drawPause();
         } else if (this.state === 'PAUSED') {
             this.state = 'PLAYING';
-            this.loop();
         }
     }
 
     resetGame() {
-        this.paddle1.score = 0;
-        this.paddle2.score = 0;
-        this.updateScoreDisplay();
-        this.resetPositions();
         this.state = 'MENU';
-        this.drawMenu();
+        this.winner = null;
+        this.resetPositions();
+    }
+
+    addParticles(x, y, color, count = 10) {
+        for (let i = 0; i < count; i++) {
+            this.particles.push(new Particle(x, y, color));
+        }
+    }
+
+    shakeScreen(duration, intensity) {
+        this.shakeTime = duration;
+        this.shakeIntensity = intensity;
     }
 
     update() {
+        // Update particles regardless of state (for visual flair)
+        this.particles = this.particles.filter(p => p.life > 0);
+        this.particles.forEach(p => p.update());
+
         if (this.state !== 'PLAYING') return;
 
-        // --- Paddle 1 Movement (Player) ---
+        // Reduce shake
+        if (this.shakeTime > 0) this.shakeTime--;
+
+        // --- Paddle 1 ---
         if (this.input.isPressed(KEYS.P1_UP)) {
             if (this.paddle1.y > 0) this.paddle1.y -= PADDLE_SPEED;
         }
@@ -181,15 +279,16 @@ class Game {
             if (this.paddle1.y < this.height - PADDLE_HEIGHT) this.paddle1.y += PADDLE_SPEED;
         }
 
-        // --- Paddle 2 Movement (Player or AI) ---
-        if (this.isSinglePlayer) {
-            // Simple AI
+        // --- Paddle 2 ---
+        if (this.mode === 'AI') {
             const paddleCenter = this.paddle2.y + PADDLE_HEIGHT / 2;
-            // Add a deadzone to prevent jitter
-            if (paddleCenter < this.ball.y - 10) {
-                this.paddle2.y += PADDLE_SPEED * 0.85; // Slightly slower than player
-            } else if (paddleCenter > this.ball.y + 10) {
-                this.paddle2.y -= PADDLE_SPEED * 0.85;
+            const aiSpeed = PADDLE_SPEED * this.difficulty.speedRatio;
+            
+            // AI Movement with deadzone
+            if (paddleCenter < this.ball.y - 15) {
+                this.paddle2.y += aiSpeed;
+            } else if (paddleCenter > this.ball.y + 15) {
+                this.paddle2.y -= aiSpeed;
             }
         } else {
             if (this.input.isPressed(KEYS.P2_UP)) {
@@ -199,52 +298,66 @@ class Game {
                 if (this.paddle2.y < this.height - PADDLE_HEIGHT) this.paddle2.y += PADDLE_SPEED;
             }
         }
-
-        // Clamp paddle 2
+        
+        // Clamp Paddle 2
         this.paddle2.y = Math.max(0, Math.min(this.height - PADDLE_HEIGHT, this.paddle2.y));
 
+        // --- Ball Trail Logic ---
+        this.ball.trail.push({ x: this.ball.x, y: this.ball.y });
+        if (this.ball.trail.length > 10) this.ball.trail.shift();
 
         // --- Ball Movement ---
         this.ball.x += this.ball.dx * this.ball.speed;
         this.ball.y += this.ball.dy * this.ball.speed;
 
-        // Wall Collision (Top/Bottom)
+        // Wall Collision
         if (this.ball.y <= 0 + BALL_RADIUS || this.ball.y >= this.height - BALL_RADIUS) {
             this.ball.dy *= -1;
             this.audio.playWallHit();
+            this.addParticles(this.ball.x, this.ball.y, "white", 5);
         }
 
         // Paddle Collision
-        // Check Paddle 1
-        if (this.ball.x <= this.paddle1.x + PADDLE_WIDTH + BALL_RADIUS) {
-            if (this.ball.y > this.paddle1.y && this.ball.y < this.paddle1.y + PADDLE_HEIGHT) {
-                this.ball.x = this.paddle1.x + PADDLE_WIDTH + BALL_RADIUS; // Unstuck
-                this.ball.dx *= -1;
-                this.increaseSpeed();
-                this.audio.playPaddleHit();
+        const checkPaddleCollision = (paddle, isLeft) => {
+            const collisionX = isLeft ? paddle.x + PADDLE_WIDTH + BALL_RADIUS : paddle.x - BALL_RADIUS;
+            const hit = isLeft ? this.ball.x <= collisionX : this.ball.x >= collisionX;
+            
+            if (hit) {
+                if (this.ball.y > paddle.y && this.ball.y < paddle.y + PADDLE_HEIGHT) {
+                    this.ball.x = collisionX; 
+                    this.ball.dx *= -1;
+                    this.increaseSpeed();
+                    this.audio.playPaddleHit();
+                    this.addParticles(this.ball.x, this.ball.y, isLeft ? PADDLE_1_COLOR : PADDLE_2_COLOR, 15);
+                    this.shakeScreen(5, 5);
+                }
             }
-        }
+        };
 
-        // Check Paddle 2
-        if (this.ball.x >= this.paddle2.x - BALL_RADIUS) {
-            if (this.ball.y > this.paddle2.y && this.ball.y < this.paddle2.y + PADDLE_HEIGHT) {
-                this.ball.x = this.paddle2.x - BALL_RADIUS; // Unstuck
-                this.ball.dx *= -1;
-                this.increaseSpeed();
-                this.audio.playPaddleHit();
-            }
-        }
+        checkPaddleCollision(this.paddle1, true);
+        checkPaddleCollision(this.paddle2, false);
 
         // Scoring
         if (this.ball.x <= 0) {
-            this.paddle2.score++;
-            this.audio.playScore();
-            this.updateScoreDisplay();
-            this.resetBall();
+            this.scorePoint(2);
         } else if (this.ball.x >= this.width) {
-            this.paddle1.score++;
-            this.audio.playScore();
-            this.updateScoreDisplay();
+            this.scorePoint(1);
+        }
+    }
+
+    scorePoint(playerNum) {
+        if (playerNum === 1) this.paddle1.score++;
+        else this.paddle2.score++;
+
+        this.updateScoreDisplay();
+        this.audio.playScore();
+        this.shakeScreen(10, 10);
+        
+        if (this.paddle1.score >= WIN_SCORE || this.paddle2.score >= WIN_SCORE) {
+            this.winner = playerNum;
+            this.state = 'GAMEOVER';
+            this.audio.playWin();
+        } else {
             this.resetBall();
         }
     }
@@ -260,13 +373,31 @@ class Game {
     }
 
     draw() {
+        // Handle Shake
+        this.ctx.save();
+        if (this.shakeTime > 0) {
+            const dx = (Math.random() - 0.5) * this.shakeIntensity;
+            const dy = (Math.random() - 0.5) * this.shakeIntensity;
+            this.ctx.translate(dx, dy);
+        }
+
         // Clear board
         this.ctx.fillStyle = BOARD_BG;
         this.ctx.fillRect(0, 0, this.width, this.height);
 
+        // Draw Trail
+        this.ball.trail.forEach((pos, index) => {
+            const alpha = (index + 1) / this.ball.trail.length * 0.5;
+            this.ctx.globalAlpha = alpha;
+            this.ctx.fillStyle = BALL_COLOR;
+            this.ctx.beginPath();
+            this.ctx.arc(pos.x, pos.y, BALL_RADIUS * (index/this.ball.trail.length), 0, 2 * Math.PI);
+            this.ctx.fill();
+        });
+        this.ctx.globalAlpha = 1.0;
+
         // Draw Paddles
         this.ctx.strokeStyle = PADDLE_BORDER;
-        
         this.ctx.fillStyle = PADDLE_1_COLOR;
         this.ctx.fillRect(this.paddle1.x, this.paddle1.y, PADDLE_WIDTH, PADDLE_HEIGHT);
         this.ctx.strokeRect(this.paddle1.x, this.paddle1.y, PADDLE_WIDTH, PADDLE_HEIGHT);
@@ -283,41 +414,66 @@ class Game {
         this.ctx.arc(this.ball.x, this.ball.y, BALL_RADIUS, 0, 2 * Math.PI);
         this.ctx.fill();
         this.ctx.stroke();
+
+        // Draw Particles
+        this.particles.forEach(p => p.draw(this.ctx));
+
+        this.ctx.restore(); // Restore shake transform
+
+        // UI Overlays
+        if (this.state === 'MENU') this.drawMenu();
+        if (this.state === 'PAUSED') this.drawPause();
+        if (this.state === 'GAMEOVER') this.drawGameOver();
     }
 
     drawMenu() {
-        this.ctx.fillStyle = BOARD_BG;
-        this.ctx.fillRect(0, 0, this.width, this.height);
-        
-        this.ctx.fillStyle = "white";
-        this.ctx.font = "30px monospace";
-        this.ctx.textAlign = "center";
-        this.ctx.fillText("PONG", this.width / 2, this.height / 3);
+        this.drawOverlay("PONG");
         
         this.ctx.font = "20px monospace";
-        this.ctx.fillText("Press ENTER for 2 Players", this.width / 2, this.height / 2);
-        this.ctx.fillText("Press 'A' for 1 Player (AI)", this.width / 2, this.height / 2 + 40);
+        this.ctx.textAlign = "left";
         
-        this.ctx.font = "16px monospace";
-        this.ctx.fillText("Controls: W/S (Left), Up/Down (Right)", this.width / 2, this.height - 50);
+        const startX = this.width / 2 - 100;
+        let startY = this.height / 2 - 20;
+
+        this.menuOptions.forEach((option, index) => {
+            this.ctx.fillStyle = (index === this.menuSelection) ? "yellow" : "white";
+            const prefix = (index === this.menuSelection) ? "> " : "  ";
+            this.ctx.fillText(prefix + option.text, startX, startY + (index * 30));
+        });
+
+        this.ctx.fillStyle = "white";
+        this.ctx.font = "14px monospace";
+        this.ctx.textAlign = "center";
+        this.ctx.fillText("Use Arrow Keys to Select, Enter to Start", this.width / 2, this.height - 30);
     }
 
     drawPause() {
-        this.ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
+        this.drawOverlay("PAUSED", "Press ESC to Resume");
+    }
+
+    drawGameOver() {
+        const winnerText = this.winner === 1 ? "PLAYER 1 WINS!" : "PLAYER 2 WINS!";
+        this.drawOverlay(winnerText, "Press ENTER to Main Menu");
+    }
+
+    drawOverlay(title, subtitle) {
+        this.ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
         this.ctx.fillRect(0, 0, this.width, this.height);
         
         this.ctx.fillStyle = "white";
-        this.ctx.font = "40px monospace";
+        this.ctx.font = "50px monospace";
         this.ctx.textAlign = "center";
-        this.ctx.fillText("PAUSED", this.width / 2, this.height / 2);
+        this.ctx.fillText(title, this.width / 2, this.height / 2 - 20);
+
+        if (subtitle) {
+            this.ctx.font = "20px monospace";
+            this.ctx.fillText(subtitle, this.width / 2, this.height / 2 + 40);
+        }
     }
 
     loop() {
-        if (this.state !== 'PLAYING') return;
-
         this.update();
         this.draw();
-        
         requestAnimationFrame(() => this.loop());
     }
 }

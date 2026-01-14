@@ -3,24 +3,37 @@
 An implementation of the classic arcade game Pong.
 
 ## Features
-*   **Single Player (AI)**: Play against a computer opponent.
-*   **Multiplayer**: Local 2-player mode on the same keyboard.
-*   **Sound Effects**: Synthesized retro sound effects using the Web Audio API.
-*   **Smooth Gameplay**: Uses `requestAnimationFrame` for 60FPS animations.
-*   **Pause/Menu System**: Integrated menu and pause functionality.
+
+### 🎮 Gameplay Depth
+*   **Single Player AI**: Challenge yourself against 4 difficulty levels:
+    *   **Easy**: Good for beginners.
+    *   **Medium**: A fair challenge.
+    *   **Hard**: Matches your speed.
+    *   **Impossible**: Can you beat the machine?
+*   **Multiplayer**: Classic 2-player local PvP on one keyboard.
+*   **Winning Condition**: First player to **5 points** wins the match!
+
+### ✨ Visual "Juice"
+*   **Particle Effects**: Explosions on paddle hits and wall bounces.
+*   **Ball Trail**: A fading trail following the ball to emphasize speed.
+*   **Screen Shake**: The board vibrates on high-impact collisions.
+*   **Smooth Animations**: 60FPS gameplay via `requestAnimationFrame`.
+
+### 🔊 Audio
+*   **Synthesized Sound**: Retro bleeps and bloops generated in real-time using the Web Audio API.
 
 ## Controls
+*   **Navigation (Menu)**:
+    *   `Arrow Up` / `Arrow Down`: Select Mode
+    *   `Enter`: Confirm / Start Game
 *   **Player 1 (Left)**: `W` (Up) / `S` (Down)
 *   **Player 2 (Right)**: `Arrow Up` / `Arrow Down`
 *   **Pause**: `Escape`
-*   **Menu**:
-    *   `Enter`: Start 2-Player Game
-    *   `A`: Start 1-Player (AI) Game
 
 ## Setup
 Simply open `index.html` in your browser. No build step required!
 
 ## Development
-This project uses vanilla JavaScript (ES6+ Classes).
-*   `index.js`: Main game logic (Game loop, Input, Physics).
+This project uses vanilla JavaScript.
+*   `index.js`: Main game logic, physics, and rendering.
 *   `style.css`: Styling and layout.
