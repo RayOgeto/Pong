@@ -1,6 +1,6 @@
 # PONG
 
-A modern, polished web-based implementation of the classic arcade game Pong.
+An implementation of the classic arcade game Pong.
 
 ## Features
 
@@ -34,6 +34,6 @@ A modern, polished web-based implementation of the classic arcade game Pong.
 Simply open `index.html` in your browser. No build step required!
 
 ## Development
-This project uses vanilla JavaScript (ES6+ Classes).
+This project uses vanilla JavaScript.
 *   `index.js`: Main game logic, physics, and rendering.
 *   `style.css`: Styling and layout.
