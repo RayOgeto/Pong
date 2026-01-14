@@ -1,6 +1,6 @@
 # PONG
 
-A modern web-based implementation of the classic arcade game Pong.
+An implementation of the classic arcade game Pong.
 
 ## Features
 *   **Single Player (AI)**: Play against a computer opponent.
