@@ -3,9 +3,10 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
-    height: 100vh;
+    min-height: 100vh;
     margin: 0;
     color: white;
+    touch-action: manipulation; /* Prevent double-tap zoom */
 }
 
 #gamecontainer {
@@ -14,12 +15,16 @@ body {
     padding: 20px;
     border-radius: 10px;
     box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    max-width: 100%;
+    box-sizing: border-box;
 }
 
 #gameboard {
     border: 3px solid white;
     background-color: forestgreen;
     box-shadow: 0 0 10px rgba(0,0,0,0.5);
+    max-width: 100%;
+    height: auto; /* Maintain aspect ratio */
 }
 
 #scoretxt {
@@ -39,8 +44,75 @@ body {
     background-color: #444;
     color: white;
     transition: background-color 0.2s;
+    margin-bottom: 20px;
 }
 
 #resetbtn:hover {
     background-color: #666;
+}
+
+/* Mobile Controls */
+#mobile-controls {
+    display: none; /* Hidden by default on desktop */
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.control-row {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+}
+
+.control-btn {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    color: white;
+    border-radius: 10px;
+    font-family: monospace;
+    cursor: pointer;
+    touch-action: manipulation; /* Prevent zoom */
+    user-select: none; /* Prevent text selection */
+    -webkit-user-select: none;
+}
+
+.control-btn:active {
+    background-color: rgba(255, 255, 255, 0.3);
+}
+
+.control-btn.large {
+    width: 80px;
+    height: 60px;
+    font-size: 24px;
+}
+
+.control-btn.small {
+    width: 80px;
+    height: 40px;
+    font-size: 16px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 600px) {
+    #mobile-controls {
+        display: flex;
+    }
+    
+    #gamecontainer {
+        padding: 10px;
+        width: 100%;
+        height: 100vh;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
+
+    #scoretxt {
+        font-size: 40px;
+    }
+
+    #resetbtn {
+        display: none; /* Hide reset button on mobile to save space, rely on menu */
+    }
 }

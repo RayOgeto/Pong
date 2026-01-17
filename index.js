@@ -136,6 +136,17 @@ class InputHandler {
     onKey(key, callback) {
         this.callbacks[key] = callback;
     }
+
+    simulateKey(key, isPressed) {
+        if (isPressed) {
+            this.keys.add(key);
+            if (this.callbacks[key]) {
+                this.callbacks[key]();
+            }
+        } else {
+            this.keys.delete(key);
+        }
+    }
 }
 
 // --- Game Logic ---
@@ -484,3 +495,44 @@ const scoreText = document.querySelector('#scoretxt');
 const resetBtn = document.querySelector('#resetbtn');
 
 const game = new Game(canvas, scoreText, resetBtn);
+
+// Mobile Controls Setup
+const setupMobileControl = (id, key) => {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+
+    const press = (e) => {
+        e.preventDefault();
+        game.input.simulateKey(key, true);
+    };
+
+    const release = (e) => {
+        e.preventDefault();
+        game.input.simulateKey(key, false);
+    };
+
+    btn.addEventListener('mousedown', press);
+    btn.addEventListener('mouseup', release);
+    btn.addEventListener('touchstart', press, { passive: false });
+    btn.addEventListener('touchend', release, { passive: false });
+};
+
+// Map buttons to Player 1 controls (and Menu controls which share keys)
+// Note: In AI mode, P1 controls the player. In Menu, Menu keys are used.
+// We'll map the UI buttons to P1 keys for movement, which usually double as menu keys or we can map multiple.
+// The Game class uses KEYS.P1_UP ('w') for player 1, and KEYS.MENU_UP ('ArrowUp') for menu.
+// To make it work for both, we can simulate both or ensure the game handles it.
+// Let's check the game logic:
+// Menu uses KEYS.MENU_UP ('ArrowUp'). Player 1 uses 'w'.
+// We should probably map the mobile buttons to 'ArrowUp'/'ArrowDown' since they work for Menu AND Player 2.
+// BUT, if the user plays Single Player (AI), they are Player 1 ('w'/'s').
+// Let's map the mobile buttons to trigger BOTH 'w' and 'ArrowUp' to cover all bases (Menu + P1).
+
+setupMobileControl('btn-up', 'ArrowUp'); // Menu Up
+setupMobileControl('btn-up', 'w');       // Player 1 Up
+
+setupMobileControl('btn-down', 'ArrowDown'); // Menu Down
+setupMobileControl('btn-down', 's');         // Player 1 Down
+
+setupMobileControl('btn-select', 'Enter');
+setupMobileControl('btn-pause', 'Escape');
