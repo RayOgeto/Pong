@@ -4,7 +4,7 @@ An implementation of the classic arcade game Pong.
 
 ## Features
 
-### 🎮 Gameplay Depth
+### Gameplay Depth
 *   **Single Player AI**: Challenge yourself against 4 difficulty levels:
     *   **Easy**: Good for beginners.
     *   **Medium**: A fair challenge.
@@ -13,13 +13,13 @@ An implementation of the classic arcade game Pong.
 *   **Multiplayer**: Classic 2-player local PvP on one keyboard.
 *   **Winning Condition**: First player to **5 points** wins the match!
 
-### ✨ Visual "Juice"
+### Visual "Juice"
 *   **Particle Effects**: Explosions on paddle hits and wall bounces.
 *   **Ball Trail**: A fading trail following the ball to emphasize speed.
 *   **Screen Shake**: The board vibrates on high-impact collisions.
 *   **Smooth Animations**: 60FPS gameplay via `requestAnimationFrame`.
 
-### 🔊 Audio
+###  Audio
 *   **Synthesized Sound**: Retro bleeps and bloops generated in real-time using the Web Audio API.
 
 ## Controls
